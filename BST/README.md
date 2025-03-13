@@ -4,6 +4,7 @@
 The Belief State Transformer (BST) is an advanced AI model that enhances language generation by encoding **both past and future context**. Unlike traditional forward-only models, BST leverages **bidirectional reasoning** to improve coherence, planning, and structured text generation.
 
 This repository provides a **PyTorch implementation** of BST along with a **step-by-step visualization** demonstrating how the Forward Encoder (FE) and Backward Encoder (BE) operate in tandem.
+**[Refer to this blog post for more information - CloudAIApp.dev](https://cloudaiapp.dev/the-belief-state-transformer-bst-a-leap-beyond-next-token-prediction/)**.
 
 ## **Features**
 ✅ Implements BST using PyTorch
