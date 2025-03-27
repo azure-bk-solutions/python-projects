@@ -1,6 +1,6 @@
 # AIRouter
 
-**AIRouter** is a Python-based project that leverages BERT for intelligent routing, classification, and performance benchmarking. It includes Jupyter notebooks and Python scripts to train models, classify text complexity, and measure inference latency—ideal for building routing logic or fallback systems using NLP.
+**AIRouter** is a Python-based project that leverages BERT for intelligent routing, classification, and performance benchmarking. It includes Jupyter notebooks and Python scripts to train models, classify text complexity, and measure inference latency—ideal for building routing logic or fallback systems using NLP. **[Refer to this blog post for more information - CloudAIApp.dev](https://cloudaiapp.dev/building-a-cost-efficient-ai-query-router-from-fuzzy-logic-to-quantized-bert/).**
 
 ---
 
@@ -101,4 +101,4 @@ Feel free to submit issues or PRs! For major changes, open a discussion first.
 
 ## 👤 Maintainer
 
-Built by [azure-bk-solutions](https://github.com/azure-bk-solutions)
+Built by [Balaji Kithiganahalli](https://github.com/azure-bk-solutions)
