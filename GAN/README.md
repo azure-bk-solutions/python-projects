@@ -18,8 +18,8 @@ This repository demonstrates how to implement and train a Generative Adversarial
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/azure-bk-solutions/gan.git
-cd gan
+git clone https://github.com/azure-bk-solutions/python-projects.git
+cd python-projects/GAN
 ```
 
 ### 2. Set up the environment
