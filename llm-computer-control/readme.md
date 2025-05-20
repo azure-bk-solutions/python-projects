@@ -1,6 +1,6 @@
 # LLM Computer Control: LangGraph + Function Calling + Chain of Thought
 
-A framework for teaching Large Language Models to use computers through function calling and Chain of Thought reasoning.**[Refer to this blog for more information - CloudAIApp.dev](https://cloudaiapp.dev/extending-pretrained-transformers-with-domain-specific-vocabulary-a-hugging-face-walkthrough/)**.
+A framework for teaching Large Language Models to use computers through function calling and Chain of Thought reasoning.**[Refer to this blog for more information - Medium](https://medium.com/@balaji92/ec368dcb03e5/)**.
 
 <figure>
   <img src="LLM%20opening%20Browser.png" alt="">
@@ -74,19 +74,27 @@ The implementation uses Chain of Thought reasoning to break down complex tasks i
    SSH_USERNAME = "your-username"  # Change to your VM username
    SSH_KEY_PATH = "path/to/your/ssh_key.pem"  # Change to your SSH key path
    ```
+5. Configure VNC URL:
+   Edit `frontend/index.html` to update the vnc url:
+   ```html
+   <div style="height: 50%; background: #000;">
+          <!--VNC Viewer-->
+          <iframe src="http://public-ip-to yourvm:6080/vnc.html?port=6080" width="100%" height="100%" frameborder="0"></iframe>
+   </div>
+   ```
 
-5. Start the VNC server:
+6. Start the VNC server:
    ```bash
    vncserver :1 -geometry 1024x768 -depth 24
    ```
 
-6. Start the backend server:
+7. Start the backend server:
    ```bash
    cd backend
    python3 .\backend\main.py
    ```
 
-7. Access the frontend:
+8. Access the frontend:
    ```bash
    cd frontend
     python3 -m http.server 3000
