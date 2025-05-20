@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Command Assistant</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    body, html { height: 100%; margin: 0; padding: 0; }
+    .chat-container { height: 100vh; overflow-y: auto; padding: 1rem; background: #f8f9fa; }
+    .chat-box { height: 80vh; overflow-y: scroll; margin-bottom: 1rem; }
+    .user-msg { font-weight: bold; color: #0d6efd; }
+    .ai-msg { color: #212529; }
+    #plan-steps-list li { margin-bottom: 0.5rem; padding: 0.25rem; border-radius: 0.25rem; word-break: break-word; }
+    #plan-steps-list .status-icon { margin-right: 0.5rem; }
+    #plan-steps-list .step-details { margin-left: 1.5rem; font-size: 0.9em; color: #6c757d; }
+    #plan-steps-list .step-details a { margin-right: 0.5rem; }
+    #bottom-right-panel > div {
+        height: 100% !important; 
+        width: 100% !important;
+    }
+    .status-message-area-style {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="container-fluid h-100">
+    <div class="row h-100">
+      <div class="col-md-5 chat-container">
+        <h4>LLM Command Assistant</h4>
+        <div id="chat-box" class="chat-box border rounded p-2 bg-white"></div>
+        <form id="chat-form">
+          <div class="input-group">
+            <input type="text" id="user-input" class="form-control" placeholder="Ask to summarize a URL or run a command..." required>
+            <button type="submit" class="btn btn-primary">Send</button>
+          </div>
+        </form>
+      </div>
+      <div class="col-md-7 d-flex flex-column" style="height: 100vh; padding:0;">
+        <div style="height: 50%; background: #000;">
+          <iframe src="http://YOUR-VNC-URL" width="100%" height="100%" frameborder="0"></iframe>
+        </div>
+        <div id="bottom-right-panel" class="d-flex flex-column" style="height: 50%; padding: 0.5rem; background-color: #f0f0f0; overflow: hidden;">
+          <div id="status-message-area" class="status-message-area-style">
+            <p class="m-0 text-muted"><i>Agent outputs will be shown here...</i></p>
+          </div>
+          <div id="plan-display-area" class="d-flex flex-column" style="overflow-y: auto; display: none; background-color: #fff; border-radius: 0.25rem;">
+            <h5 class="sticky-top bg-light p-2 border-bottom mb-0">Execution Plan:</h5>
+            <ul id="plan-steps-list" class="list-unstyled p-2 mb-0" style="flex-grow: 1; overflow-y: auto;">
+            </ul>
+          </div>
+          <div id="output-display-area" class="p-2 border rounded bg-white" style="overflow-y: auto; display: none;">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const chatForm = document.getElementById("chat-form");
+    const userInput = document.getElementById("user-input");
+    const chatBox = document.getElementById("chat-box");
+    const statusMessageArea = document.getElementById("status-message-area");
+    const planDisplayArea = document.getElementById("plan-display-area");
+    const planStepsList = document.getElementById("plan-steps-list");
+    const outputDisplayArea = document.getElementById("output-display-area");
+    let eventSource = null;
+    let sseDataReceivedSuccessfully = false;
+
+    function showPanelInBottomRight(panelIdToShow) {
+        const panels = { status: statusMessageArea, plan: planDisplayArea, output: outputDisplayArea };
+        for (const key in panels) {
+            if (panels[key]) {
+                panels[key].style.display = (key === panelIdToShow) ? (key === "status" ? "flex" : (key === "plan" ? "flex" : "block")) : "none";
+            }
+        }
+    }
+    statusMessageArea.innerHTML = "<p class=\"m-0 text-muted\"><i>Agent outputs will be shown here...</i></p>";
+    showPanelInBottomRight("status");
+
+    async function fetchMarkdown(fileUrl) {
+        const normalizedUrl = fileUrl.replace(/\\/g, "/");
+        const fullUrl = normalizedUrl.startsWith("http") ? normalizedUrl : `http://localhost:8000${normalizedUrl.startsWith("/") ? "" : "/"}${normalizedUrl}`;
+        console.log(`Fetching markdown from: ${fullUrl}`);
+       /* if (fileUrl.endsWith(".pdf")) {
+            return await `<iframe src="${fullUrl}" width="100%" height="600px" type="application/pdf"></iframe>`;
+        } else if (fileUrl.endsWith(".md")) {
+            // handle markdown as before
+            const mdResponse = await fetch(fullUrl);
+            if (mdResponse.ok) return await mdResponse.text();
+            throw new Error(`Error loading markdown content from ${fullUrl} (Status: ${mdResponse.status})`);
+        }*/
+        const mdResponse = await fetch(fullUrl);
+        if (mdResponse.ok) return await mdResponse.text();
+        throw new Error(`Error loading markdown content from ${fullUrl} (Status: ${mdResponse.status})`);
+      //}
+        
+    }
+
+    function getStatusIcon(status) {
+        if (status === "complete") return "✅";
+        if (status === "running" || status === "started") return "⏳";
+        if (status === "error") return "❌";
+        return "⚪"; // pending or unknown
+    }
+
+    function renderStepListItem(stepOutput, index) {
+        let li = document.getElementById(`step-${index + 1}`);
+        if (!li) {
+            li = document.createElement("li");
+            li.id = `step-${index + 1}`;
+            planStepsList.appendChild(li);
+        }
+        
+        let detailsHtml = "";
+        if (stepOutput.file_url) {
+            const fileName = stepOutput.file_url.split("/").pop();
+            detailsHtml += `<a href="${stepOutput.file_url}" target="_blank" title="${stepOutput.file_url}">[${fileName || "File"}]</a>`;
+        }
+        if (stepOutput.pdf_url) {
+            const fileName = stepOutput.pdf_url.split("/").pop();
+            detailsHtml += `<a href="${stepOutput.pdf_url}" target="_blank" title="${stepOutput.pdf_url}">[${fileName || "PDF"}]</a>`;
+        }
+        if (stepOutput.screenshot_url) {
+            detailsHtml += `<a href="${stepOutput.screenshot_url}" target="_blank" title="${stepOutput.screenshot_url}">[Screenshot]</a>`;
+        }
+        if (stepOutput.status === "error" && stepOutput.error_message) {
+            detailsHtml += `<span class="text-danger ms-2">Error: ${stepOutput.error_message.substring(0,100)}${stepOutput.error_message.length > 100 ? "..." : ""}</span>`;
+        }
+
+        li.innerHTML = `<span class="status-icon">${getStatusIcon(stepOutput.status)}</span> ${stepOutput.name}`;
+        if (detailsHtml) {
+            li.innerHTML += `<div class="step-details">${detailsHtml}</div>`;
+        }
+        return li;
+    }
+
+    chatForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const message = userInput.value.trim();
+      if (!message) return;
+      chatBox.innerHTML += `<div class="user-msg">You: ${message}</div>`;
+      userInput.value = "";
+      chatBox.scrollTop = chatBox.scrollHeight;
+      statusMessageArea.innerHTML = "<p class=\"m-0\"><i>Agent is working...</i></p>";
+      showPanelInBottomRight("status");
+      planStepsList.innerHTML = "";
+      sseDataReceivedSuccessfully = false;
+      if (eventSource) { eventSource.close(); eventSource = null; }
+
+      const useCot = message.toLowerCase().includes("plan") || message.toLowerCase().includes("step");
+      if (useCot) {
+        eventSource = new EventSource(`http://localhost:8000/cot_query_stream?query=${encodeURIComponent(message)}`);
+        showPanelInBottomRight("status");
+        statusMessageArea.innerHTML = "<p class=\"m-0\"><i>Agent is working... Plan will appear shortly.</i></p>";
+
+        eventSource.onmessage = function(event) {
+          const sse = JSON.parse(event.data);
+          console.log("SSE Event:", sse.event, "Data:", sse.data);
+          sseDataReceivedSuccessfully = true;
+          const eventData = sse.data; // This is the structured payload (StepOutput or FinalSummaryResponse)
+
+          if (sse.event === "plan_generated" && eventData.steps) {
+            planStepsList.innerHTML = "";
+            eventData.steps.forEach((stepOutput, index) => {
+                renderStepListItem(stepOutput, index);
+            });
+            showPanelInBottomRight("plan");
+          } else if (sse.event === "step_started" || sse.event === "step_completed") {
+            // eventData is a StepOutput object, sse.step_index is 0-based
+            if (typeof sse.step_index !== "undefined") {
+                 renderStepListItem(eventData, sse.step_index);
+            } else {
+                console.warn("Received step event without step_index:", sse);
+            }
+            if (planDisplayArea.style.display === "none") showPanelInBottomRight("plan");
+          } else if (sse.event === "final_result") { // eventData is FinalSummaryResponse
+            console.log("Final result received:", eventData);
+            console.log("markdown_url:", eventData.markdown_url);
+            console.log("pdf_url:", eventData.pdf_url);
+            console.log("screenshot_url:", eventData.screenshot_url);
+            const assistantReplyHtml = eventData.summary_intro ? marked.parse(eventData.summary_intro) : "(No summary content)";
+            chatBox.innerHTML += `<div class="ai-msg">Assistant: ${assistantReplyHtml}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+            
+            // Update all plan steps one last time with final status from FinalSummaryResponse.steps
+            if (eventData.steps) {
+                 eventData.steps.forEach((stepOutput, index) => renderStepListItem(stepOutput, index));
+            }
+
+            if (eventData.markdown_url) {
+              fetchMarkdown(eventData.markdown_url)
+                .then(mdContent => {
+                  outputDisplayArea.innerHTML = marked.parse(mdContent);
+                  showPanelInBottomRight("output");
+                })
+                .catch(err => {
+                  console.error("Error fetching/rendering markdown:", err);
+                  outputDisplayArea.innerHTML = `<p class=\"text-danger\">Error loading final output: ${err.message}</p>`;
+                  showPanelInBottomRight("output");
+                });
+            } else {
+                // If plan was shown, keep it. Otherwise, show status.
+                if (planDisplayArea.style.display !== "flex") {
+                    showPanelInBottomRight("status"); 
+                    statusMessageArea.innerHTML = "<p class=\"m-0 text-muted\"><i>Workflow complete. No markdown output generated.</i></p>";
+                }
+            }
+            if (eventSource) eventSource.close(); eventSource = null;
+          } else if (sse.event === "error") { // eventData contains error_message, details
+            const errorMessage = eventData.error_message || eventData.details || "Unknown error";
+            chatBox.innerHTML += `<div class="ai-msg text-danger">Assistant Error: ${errorMessage}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+            showPanelInBottomRight("status");
+            statusMessageArea.innerHTML = `<p class=\"text-danger\"><i>Error during workflow: ${errorMessage}</i></p>`;
+            if (eventSource) eventSource.close(); eventSource = null;
+          }
+        };
+        eventSource.onerror = function(err) {
+          console.error("EventSource failed:", err);
+          if (!sseDataReceivedSuccessfully) {
+            chatBox.innerHTML += `<div class=\"ai-msg text-danger\">Assistant: Connection error. Please try again.</div>`;
+            statusMessageArea.innerHTML = "<p class=\"m-0 text-danger\"><i>Connection error. Please try again.</i></p>";
+          } else {
+            console.log("EventSource stream closed or errored after data received.");
+          }
+          showPanelInBottomRight("status");
+          if (eventSource) { eventSource.close(); eventSource = null; }
+        };
+      } else { // Non-CoT query
+        fetch("http://localhost:8000/query", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: message }),
+        })
+        .then(response => response.json())
+        .then(data => { // data.reply is expected to be markdown
+          const assistantReplyHtml = data.reply ? marked.parse(data.reply) : "(No reply content)";
+          chatBox.innerHTML += `<div class="ai-msg">Assistant: ${assistantReplyHtml}</div>`;
+          chatBox.scrollTop = chatBox.scrollHeight;
+          showPanelInBottomRight("status"); 
+          statusMessageArea.innerHTML = "<p class=\"m-0 text-muted\"><i>Agent outputs will be shown here...</i></p>";
+        })
+        .catch(error => {
+          console.error("Error:", error);
+          chatBox.innerHTML += `<div class=\"ai-msg text-danger\">Assistant: Error processing your request.</div>`;
+          showPanelInBottomRight("status");
+          statusMessageArea.innerHTML = "<p class=\"m-0 text-danger\"><i>Error processing request.</i></p>";
+        });
+      }
+    });
+  </script>
+</body>
+</html>
